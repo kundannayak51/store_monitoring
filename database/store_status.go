@@ -3,8 +3,8 @@ package database
 import "time"
 
 type StoreStatus struct {
-	ID        int64
-	StoreID   int64
-	Timestamp time.Time
-	Status    string
+	ID        int64     `pg:"id"`
+	StoreID   int64     `pg:"store_id"`
+	Timestamp time.Time `pg:"timestamp_utc"`
+	Status    string    `pg:"status"`
 }

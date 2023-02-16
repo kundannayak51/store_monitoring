@@ -2,9 +2,9 @@ package entities
 
 import "time"
 
-type BusinessHour struct {
+type StoreBusinessHour struct {
 	StoreID        int64
-	DayOfWeek      int
+	DayOfWeek      int64
 	StartLocalTime time.Time
 	EndLocalTime   time.Time
 }
