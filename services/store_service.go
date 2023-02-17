@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"github.com/store_monitoring/entities"
+	"github.com/store_monitoring/repository/report"
+	"github.com/store_monitoring/repository/reportstatus"
 	"github.com/store_monitoring/repository/storebusinesshour"
 	"github.com/store_monitoring/repository/storestatus"
 	"github.com/store_monitoring/repository/storetimezone"
@@ -14,58 +17,123 @@ type StoreService struct {
 	storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository
 	storeStatusRepo       storestatus.StoreStatusRepository
 	storeTimezoneRepo     storetimezone.StoreTimezoneRepository
+	reportStatusRepo      reportstatus.ReportStatusRepository
+	reportRepo            report.ReportRepository
 }
 
-func NewService(ctx context.Context, storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository, storeStatusRepo storestatus.StoreStatusRepository, storeTimezoneRepo storetimezone.StoreTimezoneRepository) *StoreService {
+func NewService(ctx context.Context, storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository, storeStatusRepo storestatus.StoreStatusRepository, storeTimezoneRepo storetimezone.StoreTimezoneRepository, reportStatusRepo reportstatus.ReportStatusRepository, reportRepo report.ReportRepository) *StoreService {
 	return &StoreService{
 		storeBusinessHourRepo: storeBusinessHourRepo,
 		storeStatusRepo:       storeStatusRepo,
 		storeTimezoneRepo:     storeTimezoneRepo,
+		reportStatusRepo:      reportStatusRepo,
+		reportRepo:            reportRepo,
 	}
 }
 
-func (s *StoreService) GenerateReportForStoreId(ctx context.Context, storeId int64) (*entities.Report, error) {
+func (s *StoreService) GetCSVData(ctx context.Context, reportId string) ([]entities.Report, error) {
+	// Query the database for report status
+	//var reportStatus database.ReportStatus
+	//err := s.db.QueryRow("SELECT * FROM ReportStatus WHERE report_id = $1", reportID).Scan(&reportStatus.ReportId, &reportStatus.Status)
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"error": "Report ID not found"})
+	//	return
+	//}
+	reportStatus, err := s.reportStatusRepo.GetReportStatus(ctx, reportId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if report is completed
+	if reportStatus.Status != "Completed" {
+		return []entities.Report{}, nil
+	}
+
+	// Query the database for report data
+	reports, err := s.reportRepo.GetReportsForReportId(ctx, reportId)
+	if err != nil {
+		return nil, err
+	}
+	return reports, nil
+}
+
+func (s *StoreService) TriggerReportGeneration(ctx context.Context) (string, error) {
+	storeIds, err := s.storeTimezoneRepo.GetAllStores()
+	if err != nil {
+		return "", err
+	}
+	reportId := utils.GenerateReportId()
+	err = s.reportStatusRepo.InsertReportStatus(ctx, reportId, "Running")
+	if err != nil {
+		return "", err
+	}
+	go s.triggerReportGenerationForEachStore(ctx, storeIds, reportId)
+	return reportId, nil
+}
+
+func (s *StoreService) triggerReportGenerationForEachStore(ctx context.Context, storeIds []int64, reportId string) {
+	for _, id := range storeIds {
+		err := s.GenerateAndStoreReportForStoreId(ctx, id, reportId)
+		if err != nil {
+			//log error
+		}
+	}
+	rowsAffected, err := s.reportStatusRepo.UpdateStatusForReportId(ctx, reportId, "Completed")
+	if err != nil {
+		//log error
+	}
+	//log rows affected
+	//TODO: remove this with log
+	fmt.Sprintf("Number of rows updated:", rowsAffected)
+}
+
+func (s *StoreService) GenerateAndStoreReportForStoreId(ctx context.Context, storeId int64, reportId string) error {
 	endTime := utils.CurrentTime
 	startTime, err := utils.GetTimeOfXDaysBefore(endTime, 7)
 
 	timeZone, err := s.storeTimezoneRepo.GetTimezoneForStore(storeId)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	localStartTime, _, err := utils.ConvertUTCStrToLocal(startTime, timeZone)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	localEndTime, _, err := utils.ConvertUTCStrToLocal(endTime, timeZone)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	//Fetching Business Hours of a Store within a time range of one week
 	storeBusinessHours, err := s.storeBusinessHourRepo.GetBusinessHoursInTimeRange(ctx, storeId, localStartTime, localEndTime)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	//If a week day is missing in storeBusinessHours, enriching that day with startTime "00:00:00" and endTime "23:59:59"
 	storeDayTimeMapping, err := s.enrichBusinessHoursAndReturnDayTimeMapping(ctx, storeId, &storeBusinessHours)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	storeStatuses, err := s.storeStatusRepo.GetStoreStatusInTimeRange(ctx, storeId, startTime, endTime)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	report, err := s.calculateWeeklyObservationAndGererateReport(ctx, storeId, &storeStatuses, &storeBusinessHours, timeZone, storeDayTimeMapping)
+	report, err := s.calculateWeeklyObservationAndGererateReport(ctx, storeId, &storeStatuses, &storeBusinessHours, timeZone, storeDayTimeMapping, reportId)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return report, nil
+	err = s.reportRepo.InsertReport(ctx, report)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.Context, storeId int64, storeStatuses *[]entities.StoreStatus, storeBusinessHours *[]entities.StoreBusinessHour, timeZone string, storeDayTimeMapping map[int64]entities.StartEndTime) (*entities.Report, error) {
+func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.Context, storeId int64, storeStatuses *[]entities.StoreStatus, storeBusinessHours *[]entities.StoreBusinessHour, timeZone string, storeDayTimeMapping map[int64]entities.StartEndTime, reportId string) (*entities.Report, error) {
 	statusMap := make(map[int64]map[int64]string, 0)
 
 	for _, businessHour := range *storeBusinessHours {
@@ -103,11 +171,11 @@ func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.C
 
 	weekelyObservation := s.createWeeklyObservation(ctx, storeId, &statusMap, day)
 
-	report := s.generateWeeklyReport(ctx, storeId, weekelyObservation, day)
+	report := s.generateWeeklyReport(ctx, storeId, weekelyObservation, day, reportId)
 	return report, nil
 }
 
-func (s *StoreService) generateWeeklyReport(ctx context.Context, storeId int64, observations *entities.Observation, currentDay int64) *entities.Report {
+func (s *StoreService) generateWeeklyReport(ctx context.Context, storeId int64, observations *entities.Observation, currentDay int64, reportId string) *entities.Report {
 	var uptimeLastHour, uptimeLastDay, uptimeLastWeek, downtimeLastHour, downtimeLastDay, downtimeLastWeek float64
 
 	if observations.IsLastHourActive {
@@ -136,6 +204,7 @@ func (s *StoreService) generateWeeklyReport(ctx context.Context, storeId int64, 
 	downtimeLastWeek = float64(totalWeeklyChunks-totalActiveWeklyChunks) / float64(totalWeeklyChunks) * 100
 
 	return &entities.Report{
+		ReportId:         reportId,
 		StoreId:          storeId,
 		UptimeLastDay:    uptimeLastDay,
 		UptimeLastHour:   uptimeLastHour,

@@ -1,6 +1,7 @@
 package entities
 
 type Report struct {
+	ReportId         string
 	StoreId          int64
 	UptimeLastHour   float64
 	UptimeLastDay    float64

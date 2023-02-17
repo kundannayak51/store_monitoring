@@ -1,8 +1,13 @@
 package utils
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"github.com/gin-gonic/gin"
 	"github.com/store_monitoring/database"
 	"github.com/store_monitoring/entities"
+	"strconv"
 	"time"
 )
 
@@ -77,6 +82,26 @@ func ConvertStoreStatusDaoToEntity(storeStatus *database.StoreStatus) *entities.
 	}
 }
 
+func ConvertReportStatusDaoToEntity(reportStatus *database.ReportStatus) *entities.ReportStatus {
+	return &entities.ReportStatus{
+		ReportId: reportStatus.ReportId,
+		Status:   reportStatus.Status,
+	}
+}
+
+func ConvertReportDaoToEntity(report *database.Report) *entities.Report {
+	return &entities.Report{
+		ReportId:         report.ReportId,
+		StoreId:          report.StoreId,
+		UptimeLastHour:   report.UptimeLastHour,
+		UptimeLastDay:    report.UptimeLastDay,
+		UptimeLastWeek:   report.UptimeLastWeek,
+		DowntimeLastHour: report.DowntimeLastHour,
+		DowntimeLastDay:  report.DowntimeLastDay,
+		DowntimeLastWeek: report.DowntimeLastWeek,
+	}
+}
+
 func GetDayMapping(day string) int64 {
 	switch day {
 	case "Monday":
@@ -96,4 +121,30 @@ func GetDayMapping(day string) int64 {
 	default:
 		return -1
 	}
+}
+
+func GenerateReportId() string {
+	randomBytes := make([]byte, 6)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return ""
+	}
+
+	reportId := base64.URLEncoding.EncodeToString(randomBytes)
+
+	return reportId
+}
+
+func ConvertFloat64ToString(val float64) string {
+	s := strconv.FormatFloat(val, 'f', 6, 64)
+	return s
+}
+
+type ValueOnlyContext struct{ context.Context }
+
+func (ValueOnlyContext) Deadline() (deadline time.Time, ok bool) { return }
+func (ValueOnlyContext) Done() <-chan struct{}                   { return nil }
+func (ValueOnlyContext) Err() error                              { return nil }
+func GetValueOnlyRequestContext(c *gin.Context) ValueOnlyContext {
+	return ValueOnlyContext{Context: c.Request.Context()}
 }
