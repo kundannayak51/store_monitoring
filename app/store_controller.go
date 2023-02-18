@@ -1,4 +1,4 @@
-package controllers
+package app
 
 import (
 	"bytes"
@@ -31,7 +31,7 @@ func (con *StoreController) TriggerReport(c *gin.Context) {
 }
 
 func (con *StoreController) GetCSVReport(c *gin.Context) {
-	reportId := c.DefaultQuery("report_id", "")
+	reportId := c.Param("report_id")
 	if len(reportId) == 0 {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid Report Id",

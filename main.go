@@ -2,16 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"github.com/store_monitoring/database"
-	"github.com/store_monitoring/repository/storebusinesshour"
-	"github.com/store_monitoring/repository/storestatus"
-	"github.com/store_monitoring/utils"
+	"github.com/store_monitoring/app"
 )
 
 func main() {
 	// initialize the database connection
-	db, err := database.ConnectDB()
+	/*db, err := database.ConnectDB()
 	if err != nil {
 		fmt.Println("Error connecting to database:", err)
 		return
@@ -51,6 +47,7 @@ func main() {
 	if err != nil {
 		return
 	}
-	fmt.Println(storeStatus, businessHours)
+	fmt.Println(storeStatus, businessHours)*/
+	app.StartApplication(context.Background())
 
 }

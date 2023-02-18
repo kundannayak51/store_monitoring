@@ -17,7 +17,7 @@ func NewReportRepository(db *sql.DB) *ReportRepository {
 }
 
 const insertReportQuery = "INSERT INTO report (report_id, store_id, uptime_last_hour, uptime_last_day, uptime_last_week, downtime_last_hour, downtime_last_day, downtime_last_week) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-const getReportQuery = "SELECT report_id, store_id, uptime_last_hour, uptime_last_day, update_last_week, downtime_last_hour, downtime_last_day, downtime_last_week FROM ReportData WHERE report_id = $1"
+const getReportQuery = "SELECT report_id, store_id, uptime_last_hour, uptime_last_day, uptime_last_week, downtime_last_hour, downtime_last_day, downtime_last_week FROM report WHERE report_id = $1"
 
 func (r *ReportRepository) InsertReport(ctx context.Context, report *entities.Report) error {
 	_, err := r.db.Exec(insertReportQuery, report.ReportId, report.StoreId, report.UptimeLastHour, report.UptimeLastDay, report.UptimeLastWeek, report.DowntimeLastHour, report.DowntimeLastDay, report.DowntimeLastWeek)

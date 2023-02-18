@@ -21,7 +21,7 @@ type StoreService struct {
 	reportRepo            report.ReportRepository
 }
 
-func NewService(ctx context.Context, storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository, storeStatusRepo storestatus.StoreStatusRepository, storeTimezoneRepo storetimezone.StoreTimezoneRepository, reportStatusRepo reportstatus.ReportStatusRepository, reportRepo report.ReportRepository) *StoreService {
+func NewService(storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository, storeStatusRepo storestatus.StoreStatusRepository, storeTimezoneRepo storetimezone.StoreTimezoneRepository, reportStatusRepo reportstatus.ReportStatusRepository, reportRepo report.ReportRepository) *StoreService {
 	return &StoreService{
 		storeBusinessHourRepo: storeBusinessHourRepo,
 		storeStatusRepo:       storeStatusRepo,
@@ -91,6 +91,7 @@ func (s *StoreService) GenerateAndStoreReportForStoreId(ctx context.Context, sto
 	endTime := utils.CurrentTime
 	startTime, err := utils.GetTimeOfXDaysBefore(endTime, 7)
 
+	//TODO: no need of this, we can fetch timezones along with storeID only
 	timeZone, err := s.storeTimezoneRepo.GetTimezoneForStore(storeId)
 	if err != nil {
 		return err
@@ -143,6 +144,7 @@ func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.C
 		day := businessHour.DayOfWeek
 
 		totalHourChunks := s.calculateTotalChunks(startTime, endTime)
+		statusMap[day] = make(map[int64]string)
 		for i := 0; i < totalHourChunks; i++ {
 			statusMap[day][int64(i)] = "None"
 		}
