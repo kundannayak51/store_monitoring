@@ -8,6 +8,7 @@ import (
 	"github.com/store_monitoring/services"
 	"github.com/store_monitoring/utils"
 	"net/http"
+	"strconv"
 )
 
 type StoreController struct {
@@ -44,7 +45,8 @@ func (con *StoreController) GetCSVReport(c *gin.Context) {
 		presenter.HandleGeneralErrorResponse(c, err)
 	}
 	if len(reports) == 0 {
-
+		c.String(http.StatusOK, "Running")
+		return
 	}
 	// Create a buffer to store the CSV data
 	buffer := &bytes.Buffer{}
@@ -55,7 +57,7 @@ func (con *StoreController) GetCSVReport(c *gin.Context) {
 
 	// Write the CSV data row by row
 	for _, r := range reports {
-		writer.Write([]string{r.ReportId, utils.ConvertFloat64ToString(r.UptimeLastHour), utils.ConvertFloat64ToString(r.UptimeLastDay), utils.ConvertFloat64ToString(r.UptimeLastWeek), utils.ConvertFloat64ToString(r.DowntimeLastHour), utils.ConvertFloat64ToString(r.DowntimeLastDay), utils.ConvertFloat64ToString(r.DowntimeLastWeek)})
+		writer.Write([]string{strconv.FormatInt(r.StoreId, 10), utils.ConvertFloat64ToString(r.UptimeLastHour), utils.ConvertFloat64ToString(r.UptimeLastDay), utils.ConvertFloat64ToString(r.UptimeLastWeek), utils.ConvertFloat64ToString(r.DowntimeLastHour), utils.ConvertFloat64ToString(r.DowntimeLastDay), utils.ConvertFloat64ToString(r.DowntimeLastWeek)})
 	}
 
 	writer.Flush()
@@ -63,5 +65,6 @@ func (con *StoreController) GetCSVReport(c *gin.Context) {
 	// Set the response header to indicate that this is a CSV file
 	c.Header("Content-Disposition", "attachment; filename=report.csv")
 	c.Data(http.StatusOK, "text/csv", buffer.Bytes())
+	c.String(http.StatusOK, "Completed")
 
 }
