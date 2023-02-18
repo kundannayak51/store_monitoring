@@ -6,7 +6,6 @@ import (
 	"github.com/store_monitoring/database"
 	"github.com/store_monitoring/entities"
 	"github.com/store_monitoring/utils"
-	"time"
 )
 
 type StoreBusinessHourRepository struct {
@@ -21,7 +20,7 @@ func NewStoreBusinessHourRepository(db *sql.DB) *StoreBusinessHourRepository {
 const getBusinessHoursQuery = `
 	SELECT id, store_id, day_of_week, start_time_local, end_time_local
 	FROM store_business_hours
-	WHERE store_id = $1 AND start_time_local <= $2 AND end_time_local >= $3
+	WHERE store_id = $1
 `
 
 func (s *StoreBusinessHourRepository) GetStoreBusinessHour(storeID int64) (*database.StoreBusinessHour, error) {
@@ -37,13 +36,13 @@ func (s *StoreBusinessHourRepository) GetStoreBusinessHour(storeID int64) (*data
 	return &storeBusinessHour, nil
 }
 
-func (s *StoreBusinessHourRepository) GetBusinessHoursInTimeRange(ctx context.Context, storeID int64, localStartTime, localEndTime time.Time) ([]entities.StoreBusinessHour, error) {
+func (s *StoreBusinessHourRepository) GetBusinessHoursInTimeRange(ctx context.Context, storeID int64, timezone string) ([]entities.StoreBusinessHour, error) {
 	// Convert the local start and end times to UTC
 	//startTimeUTC := localStartTime.UTC()
 	//endTimeUTC := localEndTime.UTC()
 
 	// Query the database for the business hours
-	rows, err := s.db.Query(getBusinessHoursQuery, storeID, localStartTime, localEndTime)
+	rows, err := s.db.Query(getBusinessHoursQuery, storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +56,7 @@ func (s *StoreBusinessHourRepository) GetBusinessHoursInTimeRange(ctx context.Co
 		if err != nil {
 			return nil, err
 		}
-		businessHours = append(businessHours, *utils.ConvertStoreBusinessHourDaoToEntity(&bh))
+		businessHours = append(businessHours, *utils.ConvertStoreBusinessHourDaoToEntity(&bh, timezone))
 	}
 
 	if err := rows.Err(); err != nil {

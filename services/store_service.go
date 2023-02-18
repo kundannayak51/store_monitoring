@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"github.com/store_monitoring/entities"
 	"github.com/store_monitoring/repository/report"
 	"github.com/store_monitoring/repository/reportstatus"
@@ -10,6 +9,7 @@ import (
 	"github.com/store_monitoring/repository/storestatus"
 	"github.com/store_monitoring/repository/storetimezone"
 	"github.com/store_monitoring/utils"
+	"math/rand"
 	"time"
 )
 
@@ -32,13 +32,7 @@ func NewService(storeBusinessHourRepo storebusinesshour.StoreBusinessHourReposit
 }
 
 func (s *StoreService) GetCSVData(ctx context.Context, reportId string) ([]entities.Report, error) {
-	// Query the database for report status
-	//var reportStatus database.ReportStatus
-	//err := s.db.QueryRow("SELECT * FROM ReportStatus WHERE report_id = $1", reportID).Scan(&reportStatus.ReportId, &reportStatus.Status)
-	//if err != nil {
-	//	c.JSON(http.StatusBadRequest, gin.H{"error": "Report ID not found"})
-	//	return
-	//}
+
 	reportStatus, err := s.reportStatusRepo.GetReportStatus(ctx, reportId)
 	if err != nil {
 		return nil, err
@@ -78,13 +72,12 @@ func (s *StoreService) triggerReportGenerationForEachStore(ctx context.Context, 
 			//log error
 		}
 	}
-	rowsAffected, err := s.reportStatusRepo.UpdateStatusForReportId(ctx, reportId, "Completed")
+	_, err := s.reportStatusRepo.UpdateStatusForReportId(ctx, reportId, "Completed")
 	if err != nil {
 		//log error
 	}
 	//log rows affected
 	//TODO: remove this with log
-	fmt.Sprintf("Number of rows updated:", rowsAffected)
 }
 
 func (s *StoreService) GenerateAndStoreReportForStoreId(ctx context.Context, storeId int64, reportId string) error {
@@ -97,21 +90,13 @@ func (s *StoreService) GenerateAndStoreReportForStoreId(ctx context.Context, sto
 		return err
 	}
 
-	localStartTime, _, err := utils.ConvertUTCStrToLocal(startTime, timeZone)
-	if err != nil {
-		return err
-	}
-	localEndTime, _, err := utils.ConvertUTCStrToLocal(endTime, timeZone)
-	if err != nil {
-		return err
-	}
 	//Fetching Business Hours of a Store within a time range of one week
-	storeBusinessHours, err := s.storeBusinessHourRepo.GetBusinessHoursInTimeRange(ctx, storeId, localStartTime, localEndTime)
+	storeBusinessHours, err := s.storeBusinessHourRepo.GetBusinessHoursInTimeRange(ctx, storeId, timeZone)
 	if err != nil {
 		return err
 	}
 	//If a week day is missing in storeBusinessHours, enriching that day with startTime "00:00:00" and endTime "23:59:59"
-	storeDayTimeMapping, err := s.enrichBusinessHoursAndReturnDayTimeMapping(ctx, storeId, &storeBusinessHours)
+	storeDayTimeMapping, err := s.enrichBusinessHoursAndReturnDayTimeMapping(ctx, storeId, &storeBusinessHours, timeZone)
 	if err != nil {
 		return err
 	}
@@ -151,12 +136,19 @@ func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.C
 	}
 
 	for _, storeStatus := range *storeStatuses {
-		localDateTime, dayStr, err := utils.ConvertUTCToLocal(storeStatus.Timestamp, timeZone)
+		localTime, dayStr, err := utils.ConvertUTCToLocal(storeStatus.Timestamp, timeZone)
 		if err != nil {
 			return nil, err
 		}
 		day := utils.GetDayMapping(dayStr)
-		localTime := utils.GetTimeFromTime(localDateTime)
+
+		liesBetween, err := utils.CheckUTCTimeLiesBetweenTwoLocalTime(storeDayTimeMapping[day].StartTime, storeDayTimeMapping[day].EndTime, localTime, timeZone)
+		if err != nil {
+
+		}
+		if !liesBetween {
+			continue
+		}
 
 		chunkNumber := s.getChunkNumberFromEnd(storeDayTimeMapping[day].StartTime, storeDayTimeMapping[day].EndTime, localTime)
 		statusMap[day][chunkNumber] = storeStatus.Status
@@ -263,6 +255,19 @@ func (s *StoreService) enrichStatusMapWithNearestStatus(ctx context.Context, sta
 			}
 		}
 
+		if countActive == 0 && countInactive == 0 {
+			for i := 0; i < len(val); i++ {
+				rand.Seed(time.Now().UnixNano())
+				randVal := rand.Float64()
+				if randVal >= 0.5 {
+					tempMap[int64(i)] = "active"
+				} else {
+					tempMap[int64(i)] = "inactive"
+				}
+			}
+
+		}
+
 		for i := 0; i < len(val); i++ {
 			if val[int64(i)] != "None" {
 				lastStatus = val[int64(i)]
@@ -303,17 +308,9 @@ func (s *StoreService) enrichStatusMapWithNearestStatus(ctx context.Context, sta
 	return resultMap
 }
 
-func (s *StoreService) enrichBusinessHoursAndReturnDayTimeMapping(ctx context.Context, storeId int64, businessHours *[]entities.StoreBusinessHour) (map[int64]entities.StartEndTime, error) {
+func (s *StoreService) enrichBusinessHoursAndReturnDayTimeMapping(ctx context.Context, storeId int64, businessHours *[]entities.StoreBusinessHour, timezone string) (map[int64]entities.StartEndTime, error) {
 	storeDayTimeMapping := make(map[int64]entities.StartEndTime)
 
-	startTime, err := time.Parse("15:04:05", utils.LocalTimeStart)
-	if err != nil {
-		return nil, err
-	}
-	endTime, err := time.Parse("15:04:05", utils.LocalTimeEnd)
-	if err != nil {
-		return nil, err
-	}
 	daysPresent := make(map[int64]bool, 0)
 	for _, businessHour := range *businessHours {
 		dayOfWeek := businessHour.DayOfWeek
@@ -330,12 +327,12 @@ func (s *StoreService) enrichBusinessHoursAndReturnDayTimeMapping(ctx context.Co
 			newBusinessHour := entities.StoreBusinessHour{
 				StoreID:        storeId,
 				DayOfWeek:      int64(i),
-				StartLocalTime: startTime,
-				EndLocalTime:   endTime,
+				StartLocalTime: utils.LocalTimeStart,
+				EndLocalTime:   utils.LocalTimeEnd,
 			}
 			storeDayTimeMapping[int64(i)] = entities.StartEndTime{
-				StartTime: startTime,
-				EndTime:   endTime,
+				StartTime: utils.LocalTimeStart,
+				EndTime:   utils.LocalTimeEnd,
 			}
 			*businessHours = append(*businessHours, newBusinessHour)
 		}
@@ -343,16 +340,16 @@ func (s *StoreService) enrichBusinessHoursAndReturnDayTimeMapping(ctx context.Co
 	return storeDayTimeMapping, nil
 }
 
-func (s *StoreService) calculateTotalChunks(startTime, endTime time.Time) int {
-	/*start, err := time.Parse("15:04:05", startTime)
+func (s *StoreService) calculateTotalChunks(startTimeStr, endTimeStr string) int {
+	startTime, err := time.Parse("15:04:05", startTimeStr)
 	if err != nil {
-		log.Fatal(err)
+		return -1
 	}
 
-	end, err := time.Parse("15:04:05", endTime)
+	endTime, err := time.Parse("15:04:05", endTimeStr)
 	if err != nil {
-		log.Fatal(err)
-	}*/
+		return -1
+	}
 	duration := endTime.Sub(startTime)
 	totalMinutes := int(duration.Minutes())
 
@@ -362,16 +359,20 @@ func (s *StoreService) calculateTotalChunks(startTime, endTime time.Time) int {
 	return totalMinutes/60 + 1
 }
 
-func (s *StoreService) getChunkNumberFromEnd(startTime, endTime, inputTime time.Time) int64 {
-	// Parse start and end times
-	//start, _ := time.Parse("15:04:05", startTime)
-	//end, _ := time.Parse("15:04:05", endTime)
-	//inputTime, _ := time.Parse("15:04:05", timeStr)
+func (s *StoreService) getChunkNumberFromEnd(startTimeStr, endTimeStr, inputTimeStr string) int64 {
 
-	// Calculate the number of minutes between start time and input time
+	inputTime, err := time.Parse("15:04:05", inputTimeStr)
+	if err != nil {
+		return -1
+	}
+
+	endTime, err := time.Parse("15:04:05", endTimeStr)
+	if err != nil {
+		return -1
+	}
+
 	minutes := int(endTime.Sub(inputTime).Minutes())
 
-	// Calculate the chunk number
 	chunk := minutes / 60
 
 	return int64(chunk)

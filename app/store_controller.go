@@ -51,7 +51,7 @@ func (con *StoreController) GetCSVReport(c *gin.Context) {
 
 	// Write the CSV header
 	writer := csv.NewWriter(buffer)
-	writer.Write([]string{"store_id", "uptime_last_hour", "uptime_last_day", "update_last_week", "downtime_last_hour", "downtime_last_day", "downtime_last_week"})
+	writer.Write([]string{"store_id", "uptime_last_hour(%)", "uptime_last_day(%)", "update_last_week(%)", "downtime_last_hour(%)", "downtime_last_day(%)", "downtime_last_week(%)"})
 
 	// Write the CSV data row by row
 	for _, r := range reports {
