@@ -9,8 +9,8 @@
 | **Golang Version**       | 1.18             |
 | **Database**             | postgreSQL       | 
 
-### CurrentTime
-Currently the project has hard-coded currentTime = "2023-01-25 18:13:22.47922 UTC" which max of time present in store_status db. You can edit it in util.go file.
+### CurrentTime And Port
+Currently the project has hard-coded currentTime = "2023-01-25 18:13:22.47922 UTC" which max of time present in store_status db. You can edit it in util.go file. The project will run on port 8080, you can change it from StartApplication() method in application.go file
 ### Database setup in local
 1. create a database `store_monitoring` in pgAdmin:
 
