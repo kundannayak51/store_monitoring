@@ -17,7 +17,7 @@ func SetupRoutes(db *sql.DB) {
 	reportStatusRepo := reportstatus.NewReportStatusRepository(db)
 	reportRepo := report.NewReportRepository(db)
 
-	storeService := services.NewService(*storeBusinessHourRepo, *storeStatusRepo, *storeTimezoneRepo, *reportStatusRepo, *reportRepo)
+	storeService := services.NewService(storeBusinessHourRepo, storeStatusRepo, storeTimezoneRepo, reportStatusRepo, reportRepo)
 
 	storeController := NewStoreController(*storeService)
 

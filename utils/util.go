@@ -11,12 +11,12 @@ import (
 	"time"
 )
 
-const CurrentTime = "2023-01-24 09:07:26.441407 UTC"
+const CurrentTime = "2023-01-25 18:13:22.47922 UTC"
 const LocalTimeStart = "00:00:00"
 const LocalTimeEnd = "23:59:59"
 
 func ConvertUTCStrToLocal(utcTimestamp, timezoneStr string) (time.Time, string, error) {
-	utcTime, err := time.Parse("2006-01-02 15:04:05.000000 MST", utcTimestamp)
+	utcTime, err := time.Parse("2006-01-02 15:04:05.999999999 MST", utcTimestamp)
 	if err != nil {
 		return time.Time{}, "", err
 	}
@@ -65,43 +65,13 @@ func GetTimeFromTime(t time.Time) time.Time {
 	return time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), 0, t.Location())
 }
 
-func ConvertStoreBusinessHourDaoToEntity(storeBusinessHour *database.StoreBusinessHour, timezone string) *entities.StoreBusinessHour {
-	/*loc, err := time.LoadLocation(timezone)
-	if err != nil {
-		return nil
-	}
-	startTimeStr := storeBusinessHour.StartTimeLocal
-	endTimeStr := storeBusinessHour.EndTimeLocal
-
-	startTime, err := time.Parse("15:04:05", startTimeStr)
-	if err != nil {
-		return nil
-	}
-	startTime = startTime.In(loc)
-	startTime = GetTimeFromTime(startTime)
-
-	endTime, err := time.Parse("15:04:05", endTimeStr)
-	if err != nil {
-		return nil
-	}
-	endTime = endTime.In(loc)
-	endTime = GetTimeFromTime(endTime)*/
-
+func ConvertStoreBusinessHourDaoToEntity(storeBusinessHour *database.StoreBusinessHour) *entities.StoreBusinessHour {
 	return &entities.StoreBusinessHour{
 		StoreID:        storeBusinessHour.StoreID,
 		DayOfWeek:      storeBusinessHour.DayOfWeek,
 		StartLocalTime: storeBusinessHour.StartTimeLocal,
 		EndLocalTime:   storeBusinessHour.EndTimeLocal,
 	}
-}
-
-func ConvertToLocalAndGetOnlyTime(t time.Time, timezone string) time.Time {
-	loc, err := time.LoadLocation(timezone)
-	if err != nil {
-		return time.Time{}
-	}
-	t = t.In(loc)
-	return GetTimeFromTime(t)
 }
 
 func ConvertStoreStatusDaoToEntity(storeStatus *database.StoreStatus) *entities.StoreStatus {
@@ -182,10 +152,11 @@ func GetValueOnlyRequestContext(c *gin.Context) ValueOnlyContext {
 func CheckUTCTimeLiesBetweenTwoLocalTime(startTimeStr, endTimeStr, localTimeStr, timezone string) (bool, error) {
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
+		//log error
 		return false, err
 	}
 
-	// Parse the start and end times
+	// Parse the start, end, and local time
 	startTime, err := time.ParseInLocation("15:04:05", startTimeStr, loc)
 	if err != nil {
 		return false, err

@@ -23,25 +23,7 @@ const getBusinessHoursQuery = `
 	WHERE store_id = $1
 `
 
-func (s *StoreBusinessHourRepository) GetStoreBusinessHour(storeID int64) (*database.StoreBusinessHour, error) {
-	query := `SELECT * FROM store_business_hour WHERE store_id = $storeID`
-	row := s.db.QueryRow(query, storeID)
-
-	var storeBusinessHour database.StoreBusinessHour
-	err := row.Scan(&storeBusinessHour.ID, &storeBusinessHour.StoreID, &storeBusinessHour.DayOfWeek, &storeBusinessHour.StartTimeLocal, &storeBusinessHour.EndTimeLocal)
-	if err != nil {
-		return nil, err
-	}
-
-	return &storeBusinessHour, nil
-}
-
-func (s *StoreBusinessHourRepository) GetBusinessHoursInTimeRange(ctx context.Context, storeID int64, timezone string) ([]entities.StoreBusinessHour, error) {
-	// Convert the local start and end times to UTC
-	//startTimeUTC := localStartTime.UTC()
-	//endTimeUTC := localEndTime.UTC()
-
-	// Query the database for the business hours
+func (s *StoreBusinessHourRepository) GetBusinessHoursInTimeRange(ctx context.Context, storeID int64) ([]entities.StoreBusinessHour, error) {
 	rows, err := s.db.Query(getBusinessHoursQuery, storeID)
 	if err != nil {
 		return nil, err
@@ -56,7 +38,7 @@ func (s *StoreBusinessHourRepository) GetBusinessHoursInTimeRange(ctx context.Co
 		if err != nil {
 			return nil, err
 		}
-		businessHours = append(businessHours, *utils.ConvertStoreBusinessHourDaoToEntity(&bh, timezone))
+		businessHours = append(businessHours, *utils.ConvertStoreBusinessHourDaoToEntity(&bh))
 	}
 
 	if err := rows.Err(); err != nil {

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"github.com/store_monitoring/constants"
 	"github.com/store_monitoring/entities"
 	"github.com/store_monitoring/repository/report"
 	"github.com/store_monitoring/repository/reportstatus"
@@ -14,14 +15,14 @@ import (
 )
 
 type StoreService struct {
-	storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository
-	storeStatusRepo       storestatus.StoreStatusRepository
-	storeTimezoneRepo     storetimezone.StoreTimezoneRepository
-	reportStatusRepo      reportstatus.ReportStatusRepository
-	reportRepo            report.ReportRepository
+	storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepo
+	storeStatusRepo       storestatus.StoreStatusRepo
+	storeTimezoneRepo     storetimezone.StoreTimezoneRepo
+	reportStatusRepo      reportstatus.ReportStatusRepo
+	reportRepo            report.ReportRepo
 }
 
-func NewService(storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepository, storeStatusRepo storestatus.StoreStatusRepository, storeTimezoneRepo storetimezone.StoreTimezoneRepository, reportStatusRepo reportstatus.ReportStatusRepository, reportRepo report.ReportRepository) *StoreService {
+func NewService(storeBusinessHourRepo storebusinesshour.StoreBusinessHourRepo, storeStatusRepo storestatus.StoreStatusRepo, storeTimezoneRepo storetimezone.StoreTimezoneRepo, reportStatusRepo reportstatus.ReportStatusRepo, reportRepo report.ReportRepo) *StoreService {
 	return &StoreService{
 		storeBusinessHourRepo: storeBusinessHourRepo,
 		storeStatusRepo:       storeStatusRepo,
@@ -39,11 +40,10 @@ func (s *StoreService) GetCSVData(ctx context.Context, reportId string) ([]entit
 	}
 
 	// Check if report is completed
-	if reportStatus.Status != "Completed" {
+	if reportStatus.Status != constants.STATUS_COMPLETE {
 		return []entities.Report{}, nil
 	}
 
-	// Query the database for report data
 	reports, err := s.reportRepo.GetReportsForReportId(ctx, reportId)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (s *StoreService) TriggerReportGeneration(ctx context.Context) (string, err
 		return "", err
 	}
 	reportId := utils.GenerateReportId()
-	err = s.reportStatusRepo.InsertReportStatus(ctx, reportId, "Running")
+	err = s.reportStatusRepo.InsertReportStatus(ctx, reportId, constants.STATUS_RUNNING)
 	if err != nil {
 		return "", err
 	}
@@ -70,9 +70,10 @@ func (s *StoreService) triggerReportGenerationForEachStore(ctx context.Context, 
 		err := s.GenerateAndStoreReportForStoreId(ctx, id, reportId)
 		if err != nil {
 			//log error
+			return
 		}
 	}
-	_, err := s.reportStatusRepo.UpdateStatusForReportId(ctx, reportId, "Completed")
+	_, err := s.reportStatusRepo.UpdateStatusForReportId(ctx, reportId, constants.STATUS_COMPLETE)
 	if err != nil {
 		//log error
 	}
@@ -91,13 +92,15 @@ func (s *StoreService) GenerateAndStoreReportForStoreId(ctx context.Context, sto
 	}
 
 	//Fetching Business Hours of a Store within a time range of one week
-	storeBusinessHours, err := s.storeBusinessHourRepo.GetBusinessHoursInTimeRange(ctx, storeId, timeZone)
+	storeBusinessHours, err := s.storeBusinessHourRepo.GetBusinessHoursInTimeRange(ctx, storeId)
 	if err != nil {
+		//log error
 		return err
 	}
 	//If a week day is missing in storeBusinessHours, enriching that day with startTime "00:00:00" and endTime "23:59:59"
 	storeDayTimeMapping, err := s.enrichBusinessHoursAndReturnDayTimeMapping(ctx, storeId, &storeBusinessHours, timeZone)
 	if err != nil {
+		//log error
 		return err
 	}
 
@@ -131,7 +134,7 @@ func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.C
 		totalHourChunks := s.calculateTotalChunks(startTime, endTime)
 		statusMap[day] = make(map[int64]string)
 		for i := 0; i < totalHourChunks; i++ {
-			statusMap[day][int64(i)] = "None"
+			statusMap[day][int64(i)] = constants.STATUS_NONE
 		}
 	}
 
@@ -144,13 +147,13 @@ func (s *StoreService) calculateWeeklyObservationAndGererateReport(ctx context.C
 
 		liesBetween, err := utils.CheckUTCTimeLiesBetweenTwoLocalTime(storeDayTimeMapping[day].StartTime, storeDayTimeMapping[day].EndTime, localTime, timeZone)
 		if err != nil {
-
+			return nil, err
 		}
 		if !liesBetween {
 			continue
 		}
 
-		chunkNumber := s.getChunkNumberFromEnd(storeDayTimeMapping[day].StartTime, storeDayTimeMapping[day].EndTime, localTime)
+		chunkNumber := s.getChunkNumberFromEnd(storeDayTimeMapping[day].EndTime, localTime)
 		statusMap[day][chunkNumber] = storeStatus.Status
 	}
 
@@ -218,7 +221,7 @@ func (s *StoreService) createWeeklyObservation(ctx context.Context, storeId int6
 		activeStatus := 0
 
 		for chunk, status := range val {
-			if status == "active" {
+			if status == constants.STATUS_ACTIVE {
 				activeStatus++
 				if key == currentDay && chunk == 0 {
 					isLastHourActive = true
@@ -242,34 +245,39 @@ func (s *StoreService) createWeeklyObservation(ctx context.Context, storeId int6
 func (s *StoreService) enrichStatusMapWithNearestStatus(ctx context.Context, statusMap *map[int64]map[int64]string) map[int64]map[int64]string {
 	resultMap := make(map[int64]map[int64]string, 0)
 	for key, val := range *statusMap {
-		lastStatus := "inactive"
+		lastStatus := constants.STATUS_INACTIVE
+		rand.Seed(time.Now().UnixNano())
+		rVal := rand.Float64()
+		if rVal >= 0.5 {
+			lastStatus = constants.STATUS_ACTIVE
+		}
 		lastStatusIndex := 0
 		countActive := 0
 		countInactive := 0
 		tempMap := make(map[int64]string, 0)
 		for i := 0; i < len(val); i++ {
-			if val[int64(i)] == "inactive" {
+			if val[int64(i)] == constants.STATUS_INACTIVE {
 				countInactive++
-			} else if val[int64(i)] == "active" {
+			} else if val[int64(i)] == constants.STATUS_ACTIVE {
 				countActive++
 			}
 		}
 
 		if countActive == 0 && countInactive == 0 {
 			for i := 0; i < len(val); i++ {
-				rand.Seed(time.Now().UnixNano())
+
 				randVal := rand.Float64()
 				if randVal >= 0.5 {
-					tempMap[int64(i)] = "active"
+					tempMap[int64(i)] = constants.STATUS_ACTIVE
 				} else {
-					tempMap[int64(i)] = "inactive"
+					tempMap[int64(i)] = constants.STATUS_INACTIVE
 				}
 			}
 
 		}
 
 		for i := 0; i < len(val); i++ {
-			if val[int64(i)] != "None" {
+			if val[int64(i)] != constants.STATUS_NONE {
 				lastStatus = val[int64(i)]
 				lastStatusIndex = i
 				tempMap[int64(i)] = val[int64(i)]
@@ -280,12 +288,12 @@ func (s *StoreService) enrichStatusMapWithNearestStatus(ctx context.Context, sta
 						tempMap[int64(i)] = lastStatus
 						break
 					} else {
-						if val[int64(j)] != "None" {
+						if val[int64(j)] != constants.STATUS_NONE {
 							if j-i == i-lastStatusIndex {
 								if countInactive > countActive {
-									tempMap[int64(i)] = "inactive"
+									tempMap[int64(i)] = constants.STATUS_INACTIVE
 								} else {
-									tempMap[int64(i)] = "active"
+									tempMap[int64(i)] = constants.STATUS_ACTIVE
 								}
 								break
 							}
@@ -296,9 +304,9 @@ func (s *StoreService) enrichStatusMapWithNearestStatus(ctx context.Context, sta
 				}
 				if j == len(val) {
 					if countInactive > countActive {
-						tempMap[int64(i)] = "inactive"
+						tempMap[int64(i)] = constants.STATUS_INACTIVE
 					} else {
-						tempMap[int64(i)] = "active"
+						tempMap[int64(i)] = constants.STATUS_ACTIVE
 					}
 				}
 			}
@@ -359,7 +367,7 @@ func (s *StoreService) calculateTotalChunks(startTimeStr, endTimeStr string) int
 	return totalMinutes/60 + 1
 }
 
-func (s *StoreService) getChunkNumberFromEnd(startTimeStr, endTimeStr, inputTimeStr string) int64 {
+func (s *StoreService) getChunkNumberFromEnd(endTimeStr, inputTimeStr string) int64 {
 
 	inputTime, err := time.Parse("15:04:05", inputTimeStr)
 	if err != nil {

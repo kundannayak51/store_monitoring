@@ -29,11 +29,11 @@ const getStoreStatusQuery = `
 func (s *StoreStatusRepository) GetStoreStatusInTimeRange(ctx context.Context, storeId int64, startTimeStr, endTimeStr string) ([]entities.StoreStatus, error) {
 
 	// execute the query and retrieve the rows
-	startTime, err := time.Parse("2006-01-02 15:04:05.000000 MST", startTimeStr)
+	startTime, err := time.Parse("2006-01-02 15:04:05.999999999 MST", startTimeStr)
 	if err != nil {
 		return nil, err
 	}
-	endTime, err := time.Parse("2006-01-02 15:04:05.000000 MST", endTimeStr)
+	endTime, err := time.Parse("2006-01-02 15:04:05.999999999 MST", endTimeStr)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,6 @@ func (s *StoreStatusRepository) GetStoreStatusInTimeRange(ctx context.Context, s
 	}
 	defer rows.Close()
 
-	// parse each row into a StoreStatus struct and append to a slice
 	storeStatuses := make([]entities.StoreStatus, 0)
 	for rows.Next() {
 		var s database.StoreStatus
