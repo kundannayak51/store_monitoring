@@ -51,7 +51,7 @@ func (con *StoreController) GetCSVReport(c *gin.Context) {
 	buffer := &bytes.Buffer{}
 
 	writer := csv.NewWriter(buffer)
-	writer.Write([]string{"store_id", "uptime_last_hour(%)", "uptime_last_day(%)", "update_last_week(%)", "downtime_last_hour(%)", "downtime_last_day(%)", "downtime_last_week(%)"})
+	writer.Write([]string{"store_id", "uptime_last_hour(%)", "uptime_last_day(%)", "uptime_last_week(%)", "downtime_last_hour(%)", "downtime_last_day(%)", "downtime_last_week(%)"})
 
 	for _, r := range reports {
 		writer.Write([]string{strconv.FormatInt(r.StoreId, 10), utils.ConvertFloat64ToString(r.UptimeLastHour), utils.ConvertFloat64ToString(r.UptimeLastDay), utils.ConvertFloat64ToString(r.UptimeLastWeek), utils.ConvertFloat64ToString(r.DowntimeLastHour), utils.ConvertFloat64ToString(r.DowntimeLastDay), utils.ConvertFloat64ToString(r.DowntimeLastWeek)})
