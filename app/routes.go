@@ -19,7 +19,7 @@ func SetupRoutes(db *sql.DB) {
 
 	storeService := services.NewService(storeBusinessHourRepo, storeStatusRepo, storeTimezoneRepo, reportStatusRepo, reportRepo)
 
-	storeController := NewStoreController(*storeService)
+	storeController := NewStoreController(storeService)
 
 	Router.POST("/trigger_report", storeController.TriggerReport)
 	Router.GET("/get_report/:report_id", storeController.GetCSVReport)

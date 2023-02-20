@@ -12,10 +12,10 @@ import (
 )
 
 type StoreController struct {
-	StoreService services.StoreService
+	StoreService services.StoreServiceInterface
 }
 
-func NewStoreController(storeService services.StoreService) *StoreController {
+func NewStoreController(storeService services.StoreServiceInterface) *StoreController {
 	return &StoreController{
 		StoreService: storeService,
 	}
